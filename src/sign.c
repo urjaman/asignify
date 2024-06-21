@@ -69,15 +69,16 @@ cli_sign_help(bool full)
 
 	const char *fullmsg = ""
 		"asignify [global_opts] sign - creates a signature\n\n"
-		"Usage: asignify sign [-n] [-d <digest>...] <secretkey> <signature> [file1 [file2...]]\n"
+		"Usage: asignify sign [-n] [-d <digest>...] [-S <suffix>] <secretkey> [signature] [file1 [file2...]]\n"
 		"\t-n            Do not record files sizes\n"
 		"\t-d            Write specific digest (sha256, sha512, blake2)\n"
+		"\t-S <suffix>   Write seperate digest for each file to file<suffix>\n"
 		"\tsecretkey     Path to a secret key file make a signature\n"
 		"\tsignature     Path to signature file to write\n"
 		"\tfile          A file that will be recorded in the signature digests\n";
 
 	if (!full) {
-		return ("sign [-n] [-d <digest>] secretkey signature [file1 [file2...]]");
+		return ("sign [-n] [-d <digest>] [-S <suffix>] secretkey [signature] [file1 [file2...]]");
 	}
 
 	return (fullmsg);
@@ -88,10 +89,28 @@ struct digest_item {
 	struct digest_item *next;
 };
 
+static int
+cli_write_sign(asignify_sign_t *sgn, const char* sigfile, int added)
+{
+	if (added == 0) {
+		fprintf(stderr, "no digests has been added to the signature");
+		return (-1);
+	}
+
+	if (!asignify_sign_write_signature(sgn, sigfile)) {
+		fprintf(stderr, "cannot write sign file %s: %s\n", sigfile,
+			asignify_sign_get_error(sgn));
+		return (-1);
+	}
+
+	return 0;
+}
+
 int
 cli_sign(int argc, char **argv)
 {
 	asignify_sign_t *sgn;
+	const char *suffix = NULL;
 	const char *seckeyfile = NULL, *sigfile = NULL;
 	int i;
 	int ch;
@@ -104,10 +123,11 @@ cli_sign(int argc, char **argv)
 	static struct option long_options[] = {
 		{"no-size",   no_argument,     0,  'n' },
 		{"digest", 	required_argument, 0,  'd' },
+		{"suffix", 	required_argument, 0,  'S' },
 		{0,         0,                 0,  0 }
 	};
 
-	while ((ch = getopt_long(argc, argv, "nd:", long_options, NULL)) != -1) {
+	while ((ch = getopt_long(argc, argv, "nd:S:", long_options, NULL)) != -1) {
 		switch (ch) {
 		case 'n':
 			no_size = true;
@@ -122,6 +142,9 @@ cli_sign(int argc, char **argv)
 			dtit->type = dt;
 			dtit->next = dt_list;
 			dt_list = dtit;
+			break;
+		case 'S':
+			suffix = optarg;
 			break;
 		default:
 			return (0);
@@ -142,7 +165,7 @@ cli_sign(int argc, char **argv)
 	}
 
 	seckeyfile = argv[0];
-	sigfile = argv[1];
+	if (!suffix) sigfile = argv[1];
 
 	sgn = asignify_sign_init();
 
@@ -153,7 +176,8 @@ cli_sign(int argc, char **argv)
 		return (-1);
 	}
 
-	for (i = 2; i < argc; i ++) {
+
+	for (i = suffix ? 1 : 2; i < argc; i ++) {
 		dtit = dt_list;
 		while(dtit != NULL) {
 			if (!asignify_sign_add_file(sgn, argv[i], dtit->type)) {
@@ -177,28 +201,38 @@ cli_sign(int argc, char **argv)
 				ret = -1;
 			}
 		}
+		if (suffix) {
+			int r;
+			int fnlen = strlen(argv[i]) + strlen(suffix) + 1;
+			char *sigfn = malloc(fnlen);
+			strcpy(sigfn, argv[i]);
+			strcat(sigfn, suffix);
+			r = cli_write_sign(sgn, sigfn, added);
+			free(sigfn);
+			asignify_sign_reset_files(sgn);
+			added = 0;
+			if (r < 0) {
+				ret = -2;
+				break;
+			}
+
+		}
 	}
 
-	if (added == 0) {
-		fprintf(stderr, "no digests has been added to the signature");
-		return (-1);
-	}
-
-	if (!asignify_sign_write_signature(sgn, sigfile)) {
-		fprintf(stderr, "cannot write sign file %s: %s\n", sigfile,
-			asignify_sign_get_error(sgn));
-		asignify_sign_free(sgn);
-		return (-1);
+	if (!suffix) {
+		if (cli_write_sign(sgn, sigfile, added))
+			ret = -2;
 	}
 
 	asignify_sign_free(sgn);
 
 	if (!quiet) {
-		if (ret == 1) {
-			printf("Digests file %s has been successfully signed\n", sigfile);
-		}
-		else {
-			printf("Digests file %s has been signed but some files were not added due to errors\n", sigfile);
+		if (ret == -2) {
+			/* We already wrote about this */
+		} else if (ret == 1) {
+			printf("Digests file(s) have been successfully signed\n");
+		} else {
+			printf("Digests file(s) have been signed but some files were not added due to errors\n");
 		}
 	}
 
