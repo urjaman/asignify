@@ -151,6 +151,12 @@ bool asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf);
 const char* asignify_sign_get_error(asignify_sign_t *ctx);
 
 /**
+ * Remove all files from the sign context
+ * @param ctx sign context
+ */
+void asignify_sign_reset_files(asignify_sign_t *ctx);
+
+/**
  * Free sign context
  * @param ctx sign context
  */

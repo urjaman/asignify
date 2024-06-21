@@ -231,12 +231,20 @@ asignify_sign_get_error(asignify_sign_t *ctx)
 void
 asignify_sign_free(asignify_sign_t *ctx)
 {
+	if (ctx) {
+		asignify_sign_reset_files(ctx);
+		asignify_private_data_free(ctx->privk);
+		free(ctx);
+	}
+}
+
+void
+asignify_sign_reset_files(asignify_sign_t *ctx)
+{
 	struct asignify_file *f;
 	int i;
 
 	if (ctx) {
-		asignify_private_data_free(ctx->privk);
-
 		for (i = 0; i < kv_size(ctx->files); i ++) {
 			f = &kv_A(ctx->files, i);
 			if (f->digests) {
@@ -246,6 +254,8 @@ asignify_sign_free(asignify_sign_t *ctx)
 			free(f->fname);
 		}
 		kv_destroy(ctx->files);
-		free(ctx);
+		/* Destroy does not null out the pointer (or size).
+		 * _init does. */
+		kv_init(ctx->files);
 	}
 }
