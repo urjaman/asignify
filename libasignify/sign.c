@@ -145,7 +145,7 @@ cleanup:
 }
 
 bool
-asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf)
+asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf, bool omit_name)
 {
 	kvec_t(char) out;
 	char sig_pad[crypto_sign_BYTES + sizeof(unsigned int)];
@@ -161,6 +161,11 @@ asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf)
 		return (false);
 	}
 
+	if (omit_name && kv_size(ctx->files) > 1) {
+		CTX_MAYBE_SET_ERR(ctx, ASIGNIFY_ERROR_MISUSE);
+		return (false);
+	}
+
 	kv_init(out);
 	kv_reserve(char, out, kv_size(ctx->files) * PATH_MAX + crypto_sign_BYTES);
 
@@ -172,8 +177,12 @@ asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf)
 	for (i = 0; i < kv_size(ctx->files); i ++) {
 		f = &kv_A(ctx->files, i);
 		if (f->size != 0) {
-			r = snprintf(line, sizeof(line), "SIZE (%s) = %zu\n", f->fname,
-				f->size);
+			if (omit_name) {
+				r = snprintf(line, sizeof(line), "SIZE = %zu\n", f->size);
+			} else {
+				r = snprintf(line, sizeof(line), "SIZE (%s) = %zu\n",
+				f->fname, f->size);
+			}
 			if (r >= sizeof(line)) {
 				ctx->error = xerr_string(ASIGNIFY_ERROR_SIZE);
 				goto cleanup;
@@ -182,10 +191,16 @@ asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf)
 		else {
 			bin2hex(hex, sizeof(hex) - 1, f->digests->digest,
 				asignify_digest_len(f->digests->digest_type));
-			r = snprintf(line, sizeof(line), "%s (%s) = %s\n",
-				asignify_digest_name(f->digests->digest_type),
-				f->fname,
-				hex);
+			if (omit_name) {
+				r = snprintf(line, sizeof(line), "%s = %s\n",
+					asignify_digest_name(f->digests->digest_type),
+					hex);
+			} else {
+				r = snprintf(line, sizeof(line), "%s (%s) = %s\n",
+					asignify_digest_name(f->digests->digest_type),
+					f->fname,
+					hex);
+			}
 			if (r >= sizeof(line)) {
 				ctx->error = xerr_string(ASIGNIFY_ERROR_SIZE);
 				goto cleanup;

@@ -78,6 +78,7 @@ struct asignify_pubkey_chain {
 struct asignify_verify_ctx {
 	struct asignify_pubkey_chain *pk_chain;
 	khash_t(asignify_verify_hnode) *files;
+	bool name_omitted;
 	const char *error;
 };
 
@@ -249,6 +250,30 @@ asignify_verify_parse_files(struct asignify_verify_ctx *ctx, const char *data,
 			}
 			break;
 		case PARSE_OBRACE:
+			if (*p == '=') {
+				ctx->name_omitted = true;
+				k = kh_get(asignify_verify_hnode, ctx->files, ".");
+				if (k != kh_end(ctx->files)) {
+					/* We already have the node */
+					cur_file = kh_value(ctx->files, k);
+				} else {
+					cur_file = xmalloc0(sizeof(*cur_file));
+					cur_file->fname = strdup(".");
+					k = kh_put(asignify_verify_hnode, ctx->files,
+						cur_file->fname, &r);
+					if (r == -1) {
+						goto parse_error;
+					}
+
+					kh_value(ctx->files, k) = cur_file;
+				}
+				p++;
+				c = p;
+				state = PARSE_SPACES;
+				next_state = PARSE_HASH;
+				break;
+			}
+
 			if (*p != '(') {
 				goto parse_error;
 			}
@@ -468,8 +493,11 @@ asignify_verify_file(asignify_verify_t *ctx, const char *checkf)
 		CTX_MAYBE_SET_ERR(ctx, ASIGNIFY_ERROR_MISUSE);
 		return (false);
 	}
+	if (ctx->name_omitted)
+		k = kh_get(asignify_verify_hnode, ctx->files, ".");
+	else
+		k = kh_get(asignify_verify_hnode, ctx->files, checkf);
 
-	k = kh_get(asignify_verify_hnode, ctx->files, checkf);
 	if (k == kh_end(ctx->files)) {
 		ctx->error = xerr_string(ASIGNIFY_ERROR_NO_DIGEST);
 		return (false);

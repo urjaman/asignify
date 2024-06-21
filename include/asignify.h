@@ -139,9 +139,10 @@ bool asignify_sign_add_file(asignify_sign_t *ctx, const char *f,
  * Write the complete signature for this context
  * @param ctx sign context
  * @param sigf file name or '-' to write to stdout
+ * @param omit_name if true, do not store the filename in the digest (files must be 1)
  * @return true if a signature has been successfully written
  */
-bool asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf);
+bool asignify_sign_write_signature(asignify_sign_t *ctx, const char *sigf, bool omit_name);
 
 /**
  * Returns last error for sign context

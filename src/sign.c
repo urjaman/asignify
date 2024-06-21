@@ -97,7 +97,7 @@ cli_write_sign(asignify_sign_t *sgn, const char* sigfile, int added)
 		return (-1);
 	}
 
-	if (!asignify_sign_write_signature(sgn, sigfile)) {
+	if (!asignify_sign_write_signature(sgn, sigfile, false)) {
 		fprintf(stderr, "cannot write sign file %s: %s\n", sigfile,
 			asignify_sign_get_error(sgn));
 		return (-1);
