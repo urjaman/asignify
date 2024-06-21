@@ -69,8 +69,9 @@ cli_sign_help(bool full)
 
 	const char *fullmsg = ""
 		"asignify [global_opts] sign - creates a signature\n\n"
-		"Usage: asignify sign [-n] [-d <digest>...] [-S <suffix>] <secretkey> [signature] [file1 [file2...]]\n"
+		"Usage: asignify sign [-n] [-N] [-d <digest>...] [-S <suffix>] <secretkey> [signature] [file1 [file2...]]\n"
 		"\t-n            Do not record files sizes\n"
+		"\t-N            Do not record filename (only one file per digest allowed)\n"
 		"\t-d            Write specific digest (sha256, sha512, blake2)\n"
 		"\t-S <suffix>   Write seperate digest for each file to file<suffix>\n"
 		"\tsecretkey     Path to a secret key file make a signature\n"
@@ -78,7 +79,7 @@ cli_sign_help(bool full)
 		"\tfile          A file that will be recorded in the signature digests\n";
 
 	if (!full) {
-		return ("sign [-n] [-d <digest>] [-S <suffix>] secretkey [signature] [file1 [file2...]]");
+		return ("sign [-n] [-N] [-d <digest>] [-S <suffix>] secretkey [signature] [file1 [file2...]]");
 	}
 
 	return (fullmsg);
@@ -90,14 +91,14 @@ struct digest_item {
 };
 
 static int
-cli_write_sign(asignify_sign_t *sgn, const char* sigfile, int added)
+cli_write_sign(asignify_sign_t *sgn, const char* sigfile, int added, bool no_name)
 {
 	if (added == 0) {
 		fprintf(stderr, "no digests has been added to the signature");
 		return (-1);
 	}
 
-	if (!asignify_sign_write_signature(sgn, sigfile, false)) {
+	if (!asignify_sign_write_signature(sgn, sigfile, no_name)) {
 		fprintf(stderr, "cannot write sign file %s: %s\n", sigfile,
 			asignify_sign_get_error(sgn));
 		return (-1);
@@ -117,20 +118,25 @@ cli_sign(int argc, char **argv)
 	int ret = 1;
 	int added = 0;
 	bool no_size = false;
+	bool no_name = false;
 	/* XXX: we do not free this list on exit */
 	struct digest_item *dt_list = NULL, *dtit;
 	enum asignify_digest_type dt;
 	static struct option long_options[] = {
 		{"no-size",   no_argument,     0,  'n' },
+		{"no-name",   no_argument, 0, 'N'},
 		{"digest", 	required_argument, 0,  'd' },
 		{"suffix", 	required_argument, 0,  'S' },
 		{0,         0,                 0,  0 }
 	};
 
-	while ((ch = getopt_long(argc, argv, "nd:S:", long_options, NULL)) != -1) {
+	while ((ch = getopt_long(argc, argv, "nNd:S:", long_options, NULL)) != -1) {
 		switch (ch) {
 		case 'n':
 			no_size = true;
+			break;
+		case 'N':
+			no_name = true;
 			break;
 		case 'd':
 			dt = asignify_digest_from_str(optarg, strlen(optarg));
@@ -207,7 +213,7 @@ cli_sign(int argc, char **argv)
 			char *sigfn = malloc(fnlen);
 			strcpy(sigfn, argv[i]);
 			strcat(sigfn, suffix);
-			r = cli_write_sign(sgn, sigfn, added);
+			r = cli_write_sign(sgn, sigfn, added, no_name);
 			free(sigfn);
 			asignify_sign_reset_files(sgn);
 			added = 0;
@@ -220,7 +226,7 @@ cli_sign(int argc, char **argv)
 	}
 
 	if (!suffix) {
-		if (cli_write_sign(sgn, sigfile, added))
+		if (cli_write_sign(sgn, sigfile, added, no_name))
 			ret = -2;
 	}
 
